@@ -185,3 +185,15 @@ def rule_result_dataframe(rule_result):
         df.loc[len(df)] = r
 
     return df
+
+def decimal_parameter(val):
+    return lm.DecimalComplianceParameter(value=str(val),compliance_parameter_type='DecimalComplianceParameter')
+
+def propertykey_parameter(key):
+    return lm.PropertyKeyComplianceParameter(value=key,compliance_parameter_type='PropertyKeyComplianceParameter')
+
+def stringlist_parameter(scope, code):
+    return lm.StringListComplianceParameter(value=lm.ResourceId(scope=scope, code=code),compliance_parameter_type='StringListComplianceParameter')
+
+def portfolioidlist_parameter(scope, code):
+    return lm.PortfolioIdListComplianceParameter(value=lm.ResourceId(scope=scope,code=code),compliance_parameter_type='PortfolioIdListComplianceParameter')
