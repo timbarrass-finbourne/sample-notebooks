@@ -167,11 +167,18 @@ def rule_result_dataframe(rule_result):
     for r in sorted(rule_result.rule_result.rule_breakdown[0].results_used.keys()):
         h.append('Results Used')
         c.append(r)
+    for r in sorted(rule_result.rule_result.parameters_used.keys()):
+        h.append('Parameters Used')
+        c.append(r)
 
     df = pd.DataFrame([c], columns=h)
 
     new_labels = pd.MultiIndex.from_arrays([df.columns, df.iloc[0]], names=['', ''])
     df = df.set_axis(new_labels, axis=1).iloc[1:]
+
+    p = []
+    for k in sorted(rule_result.rule_result.parameters_used.keys()):
+        p.append(rule_result.rule_result.parameters_used[k])
 
     # Now build a row per breakdown
     for b in rule_result.rule_result.rule_breakdown:
@@ -181,6 +188,7 @@ def rule_result_dataframe(rule_result):
         r = r + [b.group_status,len(b.missing_data_information)]
         for k in sorted(b.results_used.keys()):
             r.append(b.results_used[k])
+        r = r + p
 
         df.loc[len(df)] = r
 
@@ -197,3 +205,92 @@ def stringlist_parameter(scope, code):
 
 def portfolioidlist_parameter(scope, code):
     return lm.PortfolioIdListComplianceParameter(value=lm.ResourceId(scope=scope,code=code),compliance_parameter_type='PortfolioIdListComplianceParameter')
+
+def experimental_plot_lineage(rule_result):
+    import networkx as nx
+    from collections import defaultdict
+    import igraph as ig
+    import matplotlib.pyplot as plt
+    import pprint
+
+    pp = pprint.PrettyPrinter()
+
+    graph = defaultdict(set)
+    graph['Initial'] = set()
+    layers = dict()
+    layers['Initial'] = 0
+    for b in rule_result.rule_result.rule_breakdown:
+        last = "Initial"
+        layer = 1
+        for l in b.lineage[1:-1]:
+            graph[last].add(l.sub_label)
+            layers[l.sub_label] = layer
+            last = l.sub_label
+            layer = layer + 1
+
+    edges = []
+    vertices = set()
+    for n in graph.keys():
+        vertices.add(n); 
+        for d in graph[n]:
+            edges.append((n,d))
+            vertices.add(d)
+    vertices = [v for v in vertices]
+    layers = [layers[v] for v in vertices]
+
+    I = ig.Graph(directed=True)
+    I.add_vertices(vertices)
+    I.add_edges(edges)
+    layout = I.layout_reingold_tilford(root=[0])
+
+    I.vs["label"] = vertices
+    visual_style = {
+        "edge_width": 0.3,
+        "vertex_width": 100,
+        "palette": "heat",
+        "vertex_shape": "rectangle",
+        "vertex_label_size": 8
+    }
+
+    fig, ax = plt.subplots()
+    ax.invert_yaxis()
+    ig.plot(I, layout=layout, target=ax, **visual_style)
+
+def variation_steps_to_dataframe(s):
+    h = []
+    c = []
+    c.append("Step Label"); c.append("Step Type")
+    h = h + ["",""]
+
+    if (s.compliance_step_type == "GroupFilterStep"):
+        for p in sorted(s.limit_check_parameters, key=lambda x: x.name):
+            h.append("Limit Params")
+            c.append(p.name)
+        for p in sorted(s.warning_check_parameters, key=lambda x: x.name):
+            h.append("Warning Params")
+            c.append(p.name)
+    else:
+        for p in sorted(s.parameters, key=lambda x: x.name):
+            h.append("Params")
+            c.append(p.name)
+
+    df = pd.DataFrame([c], columns=h)
+
+    new_labels = pd.MultiIndex.from_arrays([df.columns, df.iloc[0]], names=['', ''])
+    df = df.set_axis(new_labels, axis=1).iloc[1:]
+
+    r = []
+    r.append(s.label); r.append(s.compliance_step_type)
+
+    if (s.compliance_step_type == "GroupFilterStep"):
+        for p in sorted(s.limit_check_parameters, key=lambda x: x.name):
+            r.append(p.type)
+        for p in sorted(s.warning_check_parameters, key=lambda x: x.name):
+            r.append(p.type)
+    else:
+        for p in sorted(s.parameters, key=lambda x: x.name):
+            r.append(p.type)
+
+    df.loc[len(df)] = r
+
+    return df
